@@ -283,9 +283,7 @@ endif ()
 
 igame_add_example(testClip Filter/TestClip.cpp)
 igame_add_example(testSlice Filter/TestSlice.cpp)
-<<<<<<< Updated upstream
 igame_add_example(testIsoVolume Filter/TestIsoVolume.cpp)
-=======
 igame_add_example(testTriangleStrip Filter/TriangleStrip/TestTriangleStrip.cpp)
 if (TARGET Qt_module)
     igame_add_example(testTriangleStripWidget Filter/TriangleStrip/TestTriangleStripWidget.cpp)
@@ -303,7 +301,6 @@ if (TARGET Qt_module)
         endif ()
     endif ()
 endif ()
->>>>>>> Stashed changes
 igame_add_example(testDeformation Filter/Deformation/TestStressDeformationFilter.cpp)
 igame_add_example(testDeformationCode Filter/Deformation/TestStressDeformationFilterCode.cpp)
 igame_add_example(testContourLine Filter/TestContourLine.cpp)

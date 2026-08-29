@@ -1336,7 +1336,6 @@ void igQtMainWindow::showDarkFramelessMessage(const QString& title, const QStrin
 }
 
 void igQtMainWindow::initAllFilters() {
-<<<<<<< Updated upstream
     /* Feature Edges is intentionally a first-level item under 算法处理. */
     connect(ui->menu_filters->addAction(QStringLiteral("特征边提取 (Feature Edges)")),
             &QAction::triggered, this, [this](bool) {
@@ -1439,7 +1438,6 @@ void igQtMainWindow::initAllFilters() {
             dialog->close();
         });
         });
-=======
     connect(ui->action_TriangleStrip, &QAction::triggered, this, [this] {
         auto model = rendererWidget->GetScene()->GetCurrentModel();
         if (!model || !model->GetDataObject()) {
@@ -1466,7 +1464,6 @@ void igQtMainWindow::initAllFilters() {
         auto* input = TriangleStripWidget->input();
         if (input && input->GetName() == name) { TriangleStripWidget->setInput(nullptr); }
     });
->>>>>>> Stashed changes
     connect(ui->action_GlobalIds, &QAction::triggered, this, [this]() {
         auto model = rendererWidget->GetScene()->GetCurrentModel();
         if (!model) {
