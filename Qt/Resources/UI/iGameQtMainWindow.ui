@@ -1009,6 +1009,7 @@ QLabel#CustomTitleLabel {
      <string>算法处理</string>
     </property>
     <addaction name="action_GlobalIds"/>
+    <addaction name="action_TriangleStrip"/>
    </widget>
    <widget class="QMenu" name="menu_help">
     <property name="title">
@@ -1584,6 +1585,14 @@ QLabel#CustomTitleLabel {
   <action name="action_GlobalIds">
    <property name="text">
     <string>全局ID</string>
+   </property>
+  </action>
+  <action name="action_TriangleStrip">
+   <property name="text">
+    <string>三角带转换 (Triangle Strips)</string>
+   </property>
+   <property name="toolTip">
+    <string>设置最长三角带长度，并按需合并表面边界折线</string>
    </property>
   </action>
   <action name="action_AiChat">

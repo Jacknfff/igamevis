@@ -53,6 +53,7 @@
 #include <IQWidgets/igQtCharts.h>
 #include <IQWidgets/igQtDeformationWidget.h>
 #include <IQWidgets/igQtGlobalIdWidget.h>
+#include <IQWidgets/igQtTriangleStripWidget.h>
 #include <IQWidgets/igQtModelClipWidget.h>
 #include <IQWidgets/igQtModelDrawWidget.h>
 #include <IQWidgets/igQtModelInformationWidget.h>
@@ -867,6 +868,18 @@ void igQtMainWindow::initAllUnDefinedComponents() {
     connect(GlobalIdDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
         if (!visible && GlobalIdWidget) GlobalIdWidget->resetOffsets();
     });
+    TriangleStripDockWidget = igQtTriangleStripWidget::createDockWidget(this);
+    TriangleStripWidget = TriangleStripDockWidget->findChild<igQtTriangleStripWidget*>();
+    addDockWidget(Qt::RightDockWidgetArea, TriangleStripDockWidget);
+    TriangleStripDockWidget->hide();
+    connect(TriangleStripWidget, &igQtTriangleStripWidget::resultReady, this,
+            [this](DataObject::Pointer surface, DataObject::Pointer lines) {
+                // Keep the surface as the selected result, and expose boundary
+                // polylines independently instead of treating them as faces.
+                if (lines) { modelTreeWidget->addDataObjectToModelTree(lines, ItemSource::Algorithm); }
+                modelTreeWidget->addDataObjectToModelTree(surface, ItemSource::Algorithm);
+                rendererWidget->update();
+            });
     auto makeWidgetScrollable = [&](QWidget* content, QWidget* parent) -> QWidget* {
         if (!content) return nullptr;
         if (qobject_cast<QScrollArea*>(content)) return content;
@@ -1323,6 +1336,7 @@ void igQtMainWindow::showDarkFramelessMessage(const QString& title, const QStrin
 }
 
 void igQtMainWindow::initAllFilters() {
+<<<<<<< Updated upstream
     /* Feature Edges is intentionally a first-level item under 算法处理. */
     connect(ui->menu_filters->addAction(QStringLiteral("特征边提取 (Feature Edges)")),
             &QAction::triggered, this, [this](bool) {
@@ -1425,6 +1439,34 @@ void igQtMainWindow::initAllFilters() {
             dialog->close();
         });
         });
+=======
+    connect(ui->action_TriangleStrip, &QAction::triggered, this, [this] {
+        auto model = rendererWidget->GetScene()->GetCurrentModel();
+        if (!model || !model->GetDataObject()) {
+            showDarkFramelessMessage(QStringLiteral("三角带转换"), QStringLiteral("请先选择一个模型。"));
+            return;
+        }
+        auto input = model->GetDataObject();
+        if (!TriangleStripWidget->isOutput(input)) { TriangleStripWidget->setInput(input); }
+        TriangleStripDockWidget->show();
+        TriangleStripDockWidget->raise();
+        resizeDocks({TriangleStripDockWidget}, {460}, Qt::Horizontal);
+    });
+    connect(modelTreeWidget, &igQtModelDialogWidget::CurrendModelChanged, this, [this] {
+        if (!TriangleStripDockWidget->isVisible()) { return; }
+        QTimer::singleShot(0, this, [this] {
+            auto model = rendererWidget->GetScene()->GetCurrentModel();
+            auto input = model ? model->GetDataObject() : nullptr;
+            // Publishing a result selects it. Do not turn it into the source
+            // for the next Apply or clear the statistics just computed.
+            if (!TriangleStripWidget->isOutput(input)) { TriangleStripWidget->setInput(input); }
+        });
+    });
+    connect(modelTreeWidget, &igQtModelDialogWidget::ModelDeleted, this, [this](const std::string& name) {
+        auto* input = TriangleStripWidget->input();
+        if (input && input->GetName() == name) { TriangleStripWidget->setInput(nullptr); }
+    });
+>>>>>>> Stashed changes
     connect(ui->action_GlobalIds, &QAction::triggered, this, [this]() {
         auto model = rendererWidget->GetScene()->GetCurrentModel();
         if (!model) {

@@ -38,6 +38,7 @@ class igQtCommandManager;
 class igQtChromeFramelessDialog;
 class igQtPartFocusWidget;
 class igQtGlobalIdWidget;
+class igQtTriangleStripWidget;
 
 class IG_QT_MODULE_EXPORT igQtMainWindow : public QMainWindow {
     Q_OBJECT
@@ -109,6 +110,9 @@ public:
     // 全局 ID 生成与 Local/Global 对照结果
     QDockWidget* GlobalIdDockWidget{nullptr};
     igQtGlobalIdWidget* GlobalIdWidget{nullptr};
+
+    QDockWidget* TriangleStripDockWidget{nullptr};
+    igQtTriangleStripWidget* TriangleStripWidget{nullptr};
 
 private slots:
     void updateRecentFilePaths();
