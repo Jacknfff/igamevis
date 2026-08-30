@@ -1905,6 +1905,97 @@ void igQtMainWindow::initAllFilters() {
         }
     });
 
+    // 新增 Transform 菜单项
+    QAction* transformAction =ui->menu_filters->addAction(QStringLiteral("通用几何变换 (Transform)"));
+    connect(transformAction, &QAction::triggered, this, [this](bool checked) {
+        // 获取当前模型
+        auto model = rendererWidget->GetScene()->GetCurrentModel();
+        if (model == nullptr) {
+            showDarkFramelessMessage(QStringLiteral("Warning"),QStringLiteral("当前没有打开模型。"));
+            return;
+        }
+        auto data = model->GetDataObject();
+        if (data == nullptr) {
+            showDarkFramelessMessage(QStringLiteral("Warning"),QStringLiteral("当前模型没有数据。"));
+            return;
+        }
+
+        // 创建参数窗口
+        igQtFilterDialogDockWidget* dialog =new igQtFilterDialogDockWidget(this, true);
+        dialog->setFilterTitle(QStringLiteral("Transform - 通用几何变换"));
+
+        int txId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT,QStringLiteral("平移 X"),"0.0");
+        int tyId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT,QStringLiteral("平移 Y"),"0.0");
+        int tzId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT,QStringLiteral("平移 Z"),"0.0");
+        int rxId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT,QStringLiteral("旋转 X（角度）"),"0.0");
+        int ryId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT,QStringLiteral("旋转 Y（角度）"),"0.0");
+        int rzId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT,QStringLiteral("旋转 Z（角度）"),"0.0");
+        int sxId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT,QStringLiteral("缩放 X"),"1.0");
+        int syId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT,QStringLiteral("缩放 Y"),"1.0");
+        int szId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT,QStringLiteral("缩放 Z"),"1.0");
+        dialog->show();
+
+        dialog->setApplyFunctor([=, this]() {
+            bool ok = true;
+            float tx = static_cast<float>(dialog->getDouble(txId, ok));
+            if (!ok) {
+                showDarkFramelessMessage(QStringLiteral("参数错误"),QStringLiteral("平移 X 不是有效数字。"));
+                return;
+            }
+            float ty = static_cast<float>(dialog->getDouble(tyId, ok));
+            if (!ok) {
+                showDarkFramelessMessage(QStringLiteral("参数错误"),QStringLiteral("平移 Y 不是有效数字。"));
+                return;
+            }
+            float tz = static_cast<float>(dialog->getDouble(tzId, ok));
+            if (!ok) {
+                showDarkFramelessMessage(QStringLiteral("参数错误"),QStringLiteral("平移 Z 不是有效数字。"));
+                return;
+            }
+            float rx = static_cast<float>(dialog->getDouble(rxId, ok));
+            if (!ok) {
+                showDarkFramelessMessage(QStringLiteral("参数错误"),QStringLiteral("旋转 X 不是有效数字。"));
+                return;
+            }
+            float ry = static_cast<float>(dialog->getDouble(ryId, ok));
+            if (!ok) {
+                showDarkFramelessMessage(QStringLiteral("参数错误"),QStringLiteral("旋转 Y 不是有效数字。"));
+                return;
+            }
+            float rz = static_cast<float>(dialog->getDouble(rzId, ok));
+            if (!ok) {
+                showDarkFramelessMessage(QStringLiteral("参数错误"),QStringLiteral("旋转 Z 不是有效数字。"));
+                return;
+            }
+            float sx = static_cast<float>(dialog->getDouble(sxId, ok));
+            if (!ok) {
+                showDarkFramelessMessage(QStringLiteral("参数错误"),QStringLiteral("缩放 X 不是有效数字。"));
+                return;
+            }
+            float sy = static_cast<float>(dialog->getDouble(syId, ok));
+            if (!ok) {
+                showDarkFramelessMessage(QStringLiteral("参数错误"),QStringLiteral("缩放 Y 不是有效数字。"));
+                return;
+            }
+            float sz = static_cast<float>(dialog->getDouble(szId, ok));
+            if (!ok) {
+                showDarkFramelessMessage(QStringLiteral("参数错误"),QStringLiteral("缩放 Z 不是有效数字。"));
+                return;
+            }
+
+            TransformFilter::Pointer filter =TransformFilter::New();
+            filter->SetInput(data);
+            filter->SetTranslation(tx, ty, tz);
+            filter->SetRotation(rx, ry, rz);
+            filter->SetScale(sx, sy, sz);
+            if (!filter->Execute()) {
+                showDarkFramelessMessage(QStringLiteral("Warning"),QStringLiteral("Transform 执行失败。"));
+                return;
+            }
+            auto outObj = filter->GetOutput();
+            rendererWidget->update();
+        });
+    });
 
     QMenu* view = ui->menu_filters->addMenu("特征提取");
 
