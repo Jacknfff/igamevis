@@ -249,6 +249,9 @@ igame_add_example(testCellCenterFilter Filter/MyFilter/TestCellCenterFilter.cpp)
 # IO (optional modules)
 igame_add_example(testSplineReaderCPU IO/SplineReaderCPU.cpp)
 
+# Transform
+igame_add_example(testTransform Filter/TestTransform.cpp)
+
 if (ENABLE_CGNS_MODULE)
     igame_add_example(testCGNS IO/CGNSReader.cpp)
     target_compile_definitions(testCGNS PUBLIC CGNS_ENABLE)
