@@ -25,6 +25,8 @@
 #include "Convert/iGameConvertToSurfaceMeshFilter.h"
 #include "Convert/iGameConvertToVolumeMeshFilter.h"
 
+#include "Transformation/iGameTransformFilter.h"
+
 #include "FeatureExtraction/iGameFeatureEdgesFilter.h"
 
 #include "Interactor/iGameInteractor.h"
