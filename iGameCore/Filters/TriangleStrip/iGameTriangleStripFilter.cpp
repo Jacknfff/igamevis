@@ -5,6 +5,53 @@
 
 IGAME_NAMESPACE_BEGIN
 
+namespace {
+
+template<typename ArrayT>
+ArrayObject::Pointer CopyArrayTuples(ArrayObject::Pointer input,
+                                     const std::vector<igIndex>& tupleIds) {
+    auto source = DynamicCast<ArrayT>(input);
+    if (!source) return nullptr;
+
+    auto output = ArrayT::New();
+    output->SetName(source->GetName());
+    output->SetDimension(source->GetDimension());
+    output->Reserve(static_cast<IGsize>(tupleIds.size()));
+
+    const int dimension = source->GetDimension();
+    const auto* values = source->RawPointer();
+    for (const igIndex tupleId: tupleIds) {
+        if (tupleId < 0 || static_cast<IGsize>(tupleId) >= source->GetNumberOfElements()) {
+            return nullptr;
+        }
+        const IGsize offset = static_cast<IGsize>(tupleId) * static_cast<IGsize>(dimension);
+        for (int component = 0; component < dimension; ++component) {
+            output->AddValue(values[offset + static_cast<IGsize>(component)]);
+        }
+    }
+    return output;
+}
+
+ArrayObject::Pointer CopyArrayTuplesByType(ArrayObject::Pointer input,
+                                           const std::vector<igIndex>& tupleIds) {
+    if (!input) return nullptr;
+    switch (input->GetArrayType()) {
+        case IG_FloatArray:            return CopyArrayTuples<FloatArray>(input, tupleIds);
+        case IG_DoubleArray:           return CopyArrayTuples<DoubleArray>(input, tupleIds);
+        case IG_IntArray:              return CopyArrayTuples<IntArray>(input, tupleIds);
+        case IG_UnsignedIntArray:      return CopyArrayTuples<UnsignedIntArray>(input, tupleIds);
+        case IG_CharArray:             return CopyArrayTuples<CharArray>(input, tupleIds);
+        case IG_UnsignedCharArray:     return CopyArrayTuples<UnsignedCharArray>(input, tupleIds);
+        case IG_ShortArray:            return CopyArrayTuples<ShortArray>(input, tupleIds);
+        case IG_UnsignedShortArray:    return CopyArrayTuples<UnsignedShortArray>(input, tupleIds);
+        case IG_LongLongArray:         return CopyArrayTuples<LongLongArray>(input, tupleIds);
+        case IG_UnsignedLongLongArray: return CopyArrayTuples<UnsignedLongLongArray>(input, tupleIds);
+        default:                       return nullptr;
+    }
+}
+
+} // namespace
+
 TriangleStripFilter::TriangleStripFilter() {
     SetNumberOfInputs(1);
     SetNumberOfOutputs(1);
@@ -36,6 +83,7 @@ void TriangleStripFilter::ResetWorkingState() {
 
     m_FaceMarks.clear();
     m_StripSourceFaceIds.clear();
+    m_PassThroughPolySourceFaceIds.clear();
     m_LongestStripLength = 0;
 }
 
@@ -143,8 +191,6 @@ TriangleStripFilter::StripCandidate TriangleStripFilter::TraceStrip(const Orient
         candidate.FaceIds.push_back(neighborFaceId);
         currentFaceId = neighborFaceId;
     }
-
-    // 本函数只试探，不永久占用这些面。
     FreeTrial(trail);
     return candidate;
 }
@@ -264,8 +310,9 @@ void TriangleStripFilter::PassThroughPolygon(igIndex faceId) {
     if (!m_InputMesh || !m_PassThroughPolys) return;
     const igIndex* pointIds = nullptr;
     const int count = m_InputMesh->GetFaces()->GetCellIds(faceId, pointIds);
-    if (count >= 3 && pointIds) { 
-        m_PassThroughPolys->AddCellIds(pointIds, count); 
+    if (count >= 3 && pointIds) {
+        m_PassThroughPolys->AddCellIds(pointIds, count);
+        m_PassThroughPolySourceFaceIds.push_back(faceId);
     }
 }
 
@@ -394,6 +441,8 @@ bool TriangleStripFilter::BuildPolyLines() {
 bool TriangleStripFilter::BuildOutputDataObject() {
     auto output = SurfaceMesh::New();
     auto faces = CellArray::New();
+    std::vector<igIndex> outputSourceFaceIds;
+    outputSourceFaceIds.reserve(static_cast<std::size_t>(m_InputMesh->GetNumberOfFaces()));
 
     output->SetName(m_InputMesh->GetName());
     output->SetPoints(m_InputMesh->GetPoints());
@@ -401,21 +450,79 @@ bool TriangleStripFilter::BuildOutputDataObject() {
     for (IGsize stripId = 0; stripId < m_Strips->GetNumberOfCells(); ++stripId) {
         const igIndex* ids = nullptr;
         const int count = m_Strips->GetCellIds(stripId, ids);
+        if (!ids || count < 3 ||
+            static_cast<std::size_t>(stripId) >= m_StripSourceFaceIds.size() ||
+            m_StripSourceFaceIds[static_cast<std::size_t>(stripId)].size() !=
+                    static_cast<std::size_t>(count - 2)) {
+            igError("TriangleStripFilter has an invalid strip/source-face mapping. ");
+            return false;
+        }
+        const auto& sourceFaceIds = m_StripSourceFaceIds[static_cast<std::size_t>(stripId)];
         for (int i = 0; i + 2 < count; ++i) {
             igIndex tri[3] = {ids[i], ids[i + 1], ids[i + 2]};
             if (i % 2 == 1) { std::swap(tri[0], tri[1]); }
             faces->AddCellIds(tri, 3);
+            outputSourceFaceIds.push_back(sourceFaceIds[static_cast<std::size_t>(i)]);
         }
     }
 
     // 追加未处理的 polygon。
+    if (m_PassThroughPolySourceFaceIds.size() !=
+        static_cast<std::size_t>(m_PassThroughPolys->GetNumberOfCells())) {
+        igError("TriangleStripFilter has an invalid pass-through polygon mapping. ");
+        return false;
+    }
     for (IGsize i = 0; i < m_PassThroughPolys->GetNumberOfCells(); ++i) {
         const igIndex* ids = nullptr;
         const int count = m_PassThroughPolys->GetCellIds(i, ids);
         faces->AddCellIds(ids, count);
+        outputSourceFaceIds.push_back(m_PassThroughPolySourceFaceIds[static_cast<std::size_t>(i)]);
     }
+
+    if (outputSourceFaceIds.size() != static_cast<std::size_t>(faces->GetNumberOfCells())) {
+        igError("TriangleStripFilter output face mapping is incomplete. ");
+        return false;
+    }
+
+    AttributeSet::Pointer outputAttributes;
+    if (!BuildOutputAttributes(outputSourceFaceIds, outputAttributes)) return false;
+
     output->SetFaces(faces);
+    output->SetAttributeSet(outputAttributes);
     SetOutput(output);
+    return true;
+}
+
+bool TriangleStripFilter::BuildOutputAttributes(
+        const std::vector<igIndex>& outputSourceFaceIds,
+        AttributeSet::Pointer& outputAttributes) const {
+    outputAttributes = AttributeSet::New();
+    if (!m_InputMesh || !m_InputMesh->GetAttributeSet()) return true;
+
+    auto* inputAttributes = m_InputMesh->GetAttributeSet();
+    for (IGsize attributeId = 0;
+         attributeId < inputAttributes->GetNumberOfAttributes(); ++attributeId) {
+        auto& attribute = inputAttributes->GetAttribute(attributeId);
+        if (attribute.isDeleted || !attribute.pointer) continue;
+
+        if (attribute.attachmentType == IG_POINT) {
+            // Point IDs and point order are unchanged, so the array can be
+            // passed through while the AttributeSet container stays independent.
+            outputAttributes->AddAttribute(attribute.type, IG_POINT,
+                                           attribute.pointer,
+                                           attribute.GetDataRange());
+        } else if (attribute.attachmentType == IG_CELL) {
+            auto outputArray = CopyArrayTuplesByType(attribute.pointer,
+                                                     outputSourceFaceIds);
+            if (!outputArray) {
+                igError("TriangleStripFilter could not remap a cell attribute. ");
+                return false;
+            }
+            outputAttributes->AddAttribute(attribute.type, IG_CELL,
+                                           outputArray,
+                                           attribute.GetDataRange());
+        }
+    }
     return true;
 }
 IGAME_NAMESPACE_END

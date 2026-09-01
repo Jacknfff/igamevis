@@ -189,6 +189,13 @@ private:
     /** 将非三角形面复制到 m_PassThroughPolys。 */
     void PassThroughPolygon(igIndex faceId);
 
+    /**
+     * 为展开后的 SurfaceMesh 创建独立 AttributeSet。点属性保持原数组，
+     * 单元属性按照 outputSourceFaceIds 重排到输出面顺序。
+     */
+    bool BuildOutputAttributes(const std::vector<igIndex>& outputSourceFaceIds,
+                               AttributeSet::Pointer& outputAttributes) const;
+
 private:
     DataObject::Pointer m_SourceInput{};
     SurfaceMesh::Pointer m_InputMesh{};
@@ -200,6 +207,7 @@ private:
 
     std::vector<FaceMark> m_FaceMarks;
     std::vector<std::vector<igIndex>> m_StripSourceFaceIds;
+    std::vector<igIndex> m_PassThroughPolySourceFaceIds;
 
     int m_MaximumLength{1000};
     bool m_JoinContiguousSegments{false};

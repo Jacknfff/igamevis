@@ -1,10 +1,14 @@
 #include <Convert/iGameConvertToSurfaceMeshFilter.h>
 #include <DataProcessing/iGameMeshTriangulationFilter.h>
 #include <TriangleStrip/iGameTriangleStripFilter.h>
+#include <iGameAttributeSet.h>
 #include <iGameFileIO.h>
 #include <iGameSurfaceMesh.h>
 #include <iGameUnstructuredMesh.h>
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -19,9 +23,145 @@ using namespace iGame;
 
 constexpr const char* ModelFileName =
         "ContourExtraction_cylinder_UnstructedGrid.vtk";
+constexpr const char* PointScalarName = "TriangleStripTestPointScalar";
+constexpr const char* PointVectorName = "TriangleStripTestPointVector";
+constexpr const char* CellScalarName = "TriangleStripTestCellScalar";
 
 void Check(bool condition, const std::string& message) {
     if (!condition) { throw std::runtime_error(message); }
+}
+
+void AddAttributeFixtures(const SurfaceMesh::Pointer& mesh) {
+    auto pointScalars = DoubleArray::New();
+    pointScalars->SetName(PointScalarName);
+    pointScalars->SetDimension(1);
+    pointScalars->Reserve(mesh->GetNumberOfPoints());
+    for (IGsize pointId = 0; pointId < mesh->GetNumberOfPoints(); ++pointId) {
+        pointScalars->AddValue(static_cast<double>(pointId) + 0.25);
+    }
+
+    auto pointVectors = FloatArray::New();
+    pointVectors->SetName(PointVectorName);
+    pointVectors->SetDimension(3);
+    pointVectors->Reserve(mesh->GetNumberOfPoints());
+    for (IGsize pointId = 0; pointId < mesh->GetNumberOfPoints(); ++pointId) {
+        const float id = static_cast<float>(pointId);
+        pointVectors->AddElement3(id, id + 1.0f, id + 2.0f);
+    }
+
+    auto cellScalars = IntArray::New();
+    cellScalars->SetName(CellScalarName);
+    cellScalars->SetDimension(1);
+    cellScalars->Reserve(mesh->GetNumberOfFaces());
+    for (IGsize faceId = 0; faceId < mesh->GetNumberOfFaces(); ++faceId) {
+        cellScalars->AddValue(static_cast<int>(faceId) + 1000);
+    }
+
+    auto* attributes = mesh->GetAttributeSet();
+    attributes->AddAttribute(IG_SCALAR, IG_POINT, pointScalars);
+    attributes->AddAttribute(IG_VECTOR, IG_POINT, pointVectors);
+    attributes->AddAttribute(IG_SCALAR, IG_CELL, cellScalars);
+}
+
+void ValidateAttributes(const TriangleStripFilter::Pointer& filter,
+                        const SurfaceMesh::Pointer& input,
+                        const SurfaceMesh::Pointer& output) {
+    auto* inputAttributes = input->GetAttributeSet();
+    auto* outputAttributes = output->GetAttributeSet();
+    Check(inputAttributes != nullptr && outputAttributes != nullptr,
+          "Input or output AttributeSet is null.");
+    Check(inputAttributes != outputAttributes,
+          "TriangleStripFilter reused the input AttributeSet container.");
+
+    for (const char* name: {PointScalarName, PointVectorName}) {
+        const int inputIndex = inputAttributes->GetAttributeIndex(name);
+        const int outputIndex = outputAttributes->GetAttributeIndex(name);
+        Check(inputIndex >= 0 && outputIndex >= 0,
+              std::string("Missing point attribute: ") + name);
+
+        auto& inputAttribute = inputAttributes->GetAttribute(inputIndex);
+        auto& outputAttribute = outputAttributes->GetAttribute(outputIndex);
+        Check(outputAttribute.attachmentType == IG_POINT,
+              std::string("Wrong point attachment for: ") + name);
+        Check(outputAttribute.type == inputAttribute.type,
+              std::string("Point attribute type changed for: ") + name);
+        Check(outputAttribute.pointer->GetArrayType() ==
+                      inputAttribute.pointer->GetArrayType(),
+              std::string("Point array storage type changed for: ") + name);
+        Check(outputAttribute.pointer->GetDimension() ==
+                      inputAttribute.pointer->GetDimension(),
+              std::string("Point array dimension changed for: ") + name);
+        Check(outputAttribute.pointer->GetNumberOfElements() ==
+                      inputAttribute.pointer->GetNumberOfElements(),
+              std::string("Point tuple count changed for: ") + name);
+
+        for (IGsize pointId = 0;
+             pointId < inputAttribute.pointer->GetNumberOfElements(); ++pointId) {
+            for (int component = 0;
+                 component < inputAttribute.pointer->GetDimension(); ++component) {
+                const double expected =
+                        inputAttribute.pointer->GetElementValue(pointId, component);
+                const double actual =
+                        outputAttribute.pointer->GetElementValue(pointId, component);
+                Check(std::abs(expected - actual) < 1e-9,
+                      std::string("Point attribute value changed for: ") + name);
+            }
+        }
+    }
+
+    const int inputCellIndex = inputAttributes->GetAttributeIndex(CellScalarName);
+    const int outputCellIndex = outputAttributes->GetAttributeIndex(CellScalarName);
+    Check(inputCellIndex >= 0 && outputCellIndex >= 0,
+          "Missing remapped cell attribute.");
+    auto& inputCellAttribute = inputAttributes->GetAttribute(inputCellIndex);
+    auto& outputCellAttribute = outputAttributes->GetAttribute(outputCellIndex);
+    Check(outputCellAttribute.attachmentType == IG_CELL,
+          "Cell attribute has the wrong attachment type.");
+    Check(outputCellAttribute.pointer.get() != inputCellAttribute.pointer.get(),
+          "Cell attribute array was shared instead of remapped.");
+    Check(outputCellAttribute.pointer->GetArrayType() == IG_IntArray,
+          "Cell attribute storage type was not preserved.");
+    Check(outputCellAttribute.pointer->GetNumberOfElements() ==
+                  output->GetNumberOfFaces(),
+          "Cell attribute tuple count does not match output faces.");
+
+    std::vector<igIndex> outputSourceFaceIds;
+    for (const auto& stripFaceIds: filter->GetStripSourceFaceIds()) {
+        outputSourceFaceIds.insert(outputSourceFaceIds.end(),
+                                   stripFaceIds.begin(), stripFaceIds.end());
+    }
+    Check(outputSourceFaceIds.size() ==
+                  static_cast<std::size_t>(output->GetNumberOfFaces()),
+          "Test could not reconstruct the output/source face mapping.");
+    for (IGsize outputFaceId = 0;
+         outputFaceId < output->GetNumberOfFaces(); ++outputFaceId) {
+        const igIndex sourceFaceId =
+                outputSourceFaceIds[static_cast<std::size_t>(outputFaceId)];
+        const igIndex* sourcePointIds = nullptr;
+        const igIndex* outputPointIds = nullptr;
+        const int sourcePointCount =
+                input->GetFaces()->GetCellIds(sourceFaceId, sourcePointIds);
+        const int outputPointCount =
+                output->GetFaces()->GetCellIds(outputFaceId, outputPointIds);
+        Check(sourcePointIds != nullptr && outputPointIds != nullptr &&
+                      sourcePointCount == 3 && outputPointCount == 3,
+              "Cannot compare source and output triangle geometry.");
+        std::array<igIndex, 3> sourceTriangle{
+                sourcePointIds[0], sourcePointIds[1], sourcePointIds[2]};
+        std::array<igIndex, 3> outputTriangle{
+                outputPointIds[0], outputPointIds[1], outputPointIds[2]};
+        std::sort(sourceTriangle.begin(), sourceTriangle.end());
+        std::sort(outputTriangle.begin(), outputTriangle.end());
+        Check(sourceTriangle == outputTriangle,
+              "Cell attribute mapping does not match output triangle geometry.");
+
+        const double expected =
+                inputCellAttribute.pointer->GetElementValue(sourceFaceId, 0);
+        const double actual =
+                outputCellAttribute.pointer->GetElementValue(outputFaceId, 0);
+        Check(expected == actual,
+              "Cell attribute value does not match its source face.");
+    }
 }
 
 std::filesystem::path ResolveModelPath(int argc, char* argv[]) {
@@ -150,9 +290,13 @@ void ValidateStripCoverage(const TriangleStripFilter::Pointer& filter,
           "Reconstructed output has a different triangle count.");
     Check(output->GetPoints().get() == input->GetPoints().get(),
           "TriangleStripFilter did not preserve the shared point array.");
+    ValidateAttributes(filter, input, output);
+    std::cout << "  Attributes: new AttributeSet, PointData preserved, "
+                 "CellData remapped\n";
 }
 
 void TestTriangleStripGeneration(const SurfaceMesh::Pointer& triangles) {
+    AddAttributeFixtures(triangles);
     auto filter = TriangleStripFilter::New();
     filter->SetInput(triangles);
     filter->SetMaximumLength(1000);
@@ -241,6 +385,53 @@ void TestContiguousPolylineJoining(const SurfaceMesh::Pointer& triangles) {
               << ", joined point IDs=" << joinedPointCount << '\n';
 }
 
+void TestPassThroughPolygonAttributes(const SurfaceMesh::Pointer& triangles) {
+    Check(triangles->GetNumberOfPoints() >= 4,
+          "Not enough points for the pass-through polygon test.");
+
+    const igIndex pointIds[4]{0, 1, 2, 3};
+    auto faces = CellArray::New();
+    faces->AddCellIds(pointIds, 4);
+
+    auto polygon = SurfaceMesh::New();
+    polygon->SetName("TriangleStripPassThroughPolygon");
+    polygon->SetPoints(triangles->GetPoints());
+    polygon->SetFaces(faces);
+    AddAttributeFixtures(polygon);
+
+    auto filter = TriangleStripFilter::New();
+    filter->SetInput(polygon);
+    Check(filter->Execute(),
+          "TriangleStripFilter failed for a pass-through polygon.");
+    Check(filter->GetNumberOfStrips() == 0,
+          "A non-triangle polygon unexpectedly generated a strip.");
+    Check(filter->GetPassThroughPolys()->GetNumberOfCells() == 1,
+          "The non-triangle polygon was not passed through.");
+
+    auto output = DynamicCast<SurfaceMesh>(filter->GetOutput());
+    Check(output != nullptr && output->GetNumberOfFaces() == 1,
+          "Pass-through polygon output is invalid.");
+    Check(output->GetAttributeSet() != polygon->GetAttributeSet(),
+          "Pass-through output reused the input AttributeSet container.");
+
+    auto* outputAttributes = output->GetAttributeSet();
+    const int pointAttributeId =
+            outputAttributes->GetAttributeIndex(PointScalarName);
+    const int cellAttributeId =
+            outputAttributes->GetAttributeIndex(CellScalarName);
+    Check(pointAttributeId >= 0 && cellAttributeId >= 0,
+          "Pass-through output lost point or cell attributes.");
+    auto& pointAttribute = outputAttributes->GetAttribute(pointAttributeId);
+    auto& cellAttribute = outputAttributes->GetAttribute(cellAttributeId);
+    Check(pointAttribute.pointer->GetNumberOfElements() ==
+                  polygon->GetNumberOfPoints(),
+          "Pass-through point attribute tuple count changed.");
+    Check(cellAttribute.pointer->GetArrayType() == IG_IntArray &&
+                  cellAttribute.pointer->GetNumberOfElements() == 1 &&
+                  cellAttribute.pointer->GetElementValue(0, 0) == 1000.0,
+          "Pass-through cell attribute was not copied from its source face.");
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -277,6 +468,10 @@ int main(int argc, char* argv[]) {
         std::cout << "[RUN] contiguous-polyline joining\n";
         TestContiguousPolylineJoining(triangles);
         std::cout << "[PASS] contiguous-polyline joining\n";
+
+        std::cout << "[RUN] pass-through polygon attributes\n";
+        TestPassThroughPolygonAttributes(triangles);
+        std::cout << "[PASS] pass-through polygon attributes\n";
 
         std::cout << "All TriangleStripFilter tests passed.\n";
         return 0;
