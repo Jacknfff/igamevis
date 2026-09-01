@@ -22,6 +22,8 @@
 #include <QRect>
 #include <QTimer>
 #include <array>
+#include <MyFilter/iGameExtractCellsByTypeFilter.h>
+#include <iGameScene.h>
 #undef QT_NO_OPENGL
 
 class igQtModelDrawWidget;
@@ -39,6 +41,7 @@ class igQtChromeFramelessDialog;
 class igQtPartFocusWidget;
 class igQtGlobalIdWidget;
 class igQtTriangleStripWidget;
+class igQtExtractCellsByTypeWidget;
 
 class IG_QT_MODULE_EXPORT igQtMainWindow : public QMainWindow {
     Q_OBJECT
@@ -50,11 +53,15 @@ public:
         Tensor,
         Flow,
         ContourExtract,
+        ExtractEdges,
+        CountCellVertices,
         Slice,
         Deformation,
         Selection,
         VariableDensity,
         DataChange,
+        ExtractCellsByType,
+        GenerateProcessIds,
         Count
     };
 
@@ -153,7 +160,15 @@ private:
     // 左侧工具 Tab（按需添加；下方 Properties 常驻）
     QDockWidget* m_leftFieldDock = nullptr;
     QTabWidget* m_leftFieldTabs = nullptr;
-    std::array<int, static_cast<size_t>(LeftToolPanelId::Count)> m_leftToolTabByPanel{{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1}};
+    std::array<int, static_cast<size_t>(LeftToolPanelId::Count)> m_leftToolTabByPanel{};  // 构造时 fill(-1)
+    // 按单元类型提取：左侧面板 + 壳 Dock + 常驻 filter
+    // 首次提取生成独立新模型 ExtractCellsByType_n（不覆盖输入模型）；
+    // 改勾选重提取时，原地更新该新模型（模型树不新增节点）
+    QDockWidget* m_extractCellsByTypeShell = nullptr;
+    igQtExtractCellsByTypeWidget* m_extractCellsByTypeWidget = nullptr;
+    iGame::ExtractCellsByTypeFilter::Pointer m_extractCellsByTypeFilter;
+    iGame::Model::Pointer m_extractCellsByTypeModel;
+    std::array<int, static_cast<size_t>(LeftToolPanelId::Count)> m_leftToolTabByPanel{{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}};
 
     void relocateContentToLeftTab(QDockWidget* shell, QWidget* inner, const QString& title, LeftToolPanelId id,
                                   bool centerFlowField);
