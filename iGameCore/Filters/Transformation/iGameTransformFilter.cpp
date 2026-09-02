@@ -36,14 +36,16 @@ void TransformFilter::SetScale(float sx,float sy,float sz){
     m_ScaleZ = sz;
 }
 
-
-void TransformFilter::SetMatrix(const float matrix[4][4]){
+/** 
+ * void TransformFilter::SetMatrix(const float matrix[4][4]){
     for (int i = 0; i < 4; ++i){
         for (int j = 0; j < 4; ++j){
             m_Matrix[i][j] = matrix[i][j];
         }
     }
 }
+ */
+
 
 
 void TransformFilter::BuildMatrix()
@@ -136,8 +138,87 @@ bool TransformFilter::Execute(){
 
     BuildMatrix();
 
-    for (IGsize i = 0;i < pointSet->GetNumberOfPoints();++i){
-        Point p = pointSet->GetPoint(i);
+    PointSet::Pointer output = nullptr;
+
+    switch(dataObject->GetDataObjectType()){
+        case IG_SURFACE_MESH:{
+            auto input = DynamicCast<SurfaceMesh>(dataObject);
+            if (input == nullptr){return false;}
+
+            auto surfaceOutput = SurfaceMesh::New();
+            if (!surfaceOutput->DeepCopy(input)){
+                return false;
+            }
+
+            output = surfaceOutput;
+            break;
+        }
+        case IG_VOLUME_MESH:{
+            auto input = DynamicCast<VolumeMesh>(dataObject);
+            if (input == nullptr){return false;}
+
+            auto volumeOutput = VolumeMesh::New();
+
+            volumeOutput->SetVolumes(input->GetVolumes());
+            volumeOutput->SetAttributeSet(input->GetAttributeSet());
+            volumeOutput->SetName(input->GetName());
+            auto newPoints = Points::New();
+            if (!newPoints->DeepCopy(input->GetPoints())){
+                return false;
+            }
+            volumeOutput->SetPoints(newPoints);
+
+            output = volumeOutput;
+            break;
+        }
+        case IG_STRUCTURED_MESH:{
+            auto input = DynamicCast<StructuredMesh>(dataObject);
+            if (input == nullptr){return false;}
+
+            auto structuredOutput = StructuredMesh::New();
+
+            structuredOutput->SetDimensionSize(input->GetDimensionSize());
+            structuredOutput->SetExtent(input->GetExtent());
+            structuredOutput->SetAttributeSet(input->GetAttributeSet());
+            structuredOutput->SetName(input->GetName());
+            auto newPoints = Points::New();
+            if (!newPoints->DeepCopy(input->GetPoints())){
+                return false;
+            }
+            structuredOutput->SetPoints(newPoints);
+
+            output = structuredOutput;
+            break;
+        }
+        case IG_UNSTRUCTURED_MESH:{
+            auto input = DynamicCast<UnstructuredMesh>(dataObject);
+            if (input == nullptr){return false;}
+
+            auto unstructuredOutput = UnstructuredMesh::New();
+
+            unstructuredOutput->SetCells(input->GetCells(),input->GetCellTypes());
+            unstructuredOutput->SetAttributeSet(input->GetAttributeSet());
+            unstructuredOutput->SetName(input->GetName());
+            auto newPoints = Points::New();
+            if (!newPoints->DeepCopy(input->GetPoints())){
+                return false;
+            }
+            unstructuredOutput->SetPoints(newPoints);
+
+            output = unstructuredOutput;
+            break;
+        }
+
+        default:
+            return false;
+    }
+
+    if (output == nullptr){
+        return false;
+    }
+
+    for (IGsize i = 0; i < output->GetNumberOfPoints(); ++i){
+        Point p = output->GetPoint(i);
 
         float x = p[0];
         float y = p[1];
@@ -163,18 +244,17 @@ bool TransformFilter::Execute(){
             m_Matrix[3][2] * z +
             m_Matrix[3][3];
 
-        if (std::abs(newW) > 1e-6f)
-        {
+        if (std::abs(newW) > 1e-6f){
             newX /= newW;
             newY /= newW;
             newZ /= newW;
         }
 
         Point newPoint(newX, newY, newZ);
-        pointSet->SetPoint(i, newPoint);
+        output->SetPoint(i, newPoint);
     }
 
-    this->SetOutput(0, dataObject);
+    this->SetOutput(0, output);
     return true;
 }
 

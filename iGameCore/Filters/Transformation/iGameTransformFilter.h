@@ -3,6 +3,21 @@
 
 #include "iGameFilter.h"
 #include "iGamePointSet.h"
+#include "iGameSurfaceMesh.h"
+#include "iGameVolumeMesh.h"
+#include "iGameStructuredMesh.h"
+#include "iGameUnstructuredMesh.h"
+
+#include "iGameCellArray.h"
+#include "iGameCellLinks.h"
+#include "iGameEdgeTable.h"
+#include "iGameFlexArray.h"
+#include "iGamePointSet.h"
+
+#include "iGameLine.h"
+#include "iGamePolygon.h"
+#include "iGameQuad.h"
+#include "iGameTriangle.h"
 
 IGAME_NAMESPACE_BEGIN
 
@@ -13,7 +28,7 @@ public:
 
     static Pointer New(){return new TransformFilter;}
 
-    void SetMatrix(const float matrix[4][4]);
+    // void SetMatrix(const float matrix[4][4]);        暂时不需要直接输入矩阵的功能
 
     void SetTranslation(float tx,float ty,float tz);
 

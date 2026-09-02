@@ -1995,6 +1995,7 @@ void igQtMainWindow::initAllFilters() {
                 return;
             }
             auto outObj = filter->GetOutput();
+            modelTreeWidget->addDataObjectToModelTree(outObj, Algorithm);
             rendererWidget->update();
         });
     });
