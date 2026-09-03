@@ -129,6 +129,7 @@
 #include <QStyle>
 #include <QFontMetrics>
 #include <QSettings>
+#include <QComboBox>
 #include <QDialog>
 #include <QLineEdit>
 #include <QFormLayout>
@@ -1500,6 +1501,240 @@ void igQtMainWindow::initAllFilters() {
                 QStringLiteral("范围非法：low 必须小于 high。"));
             return;
         }
+    };
+
+    connect(ui->menu_filters->addAction(QStringLiteral("阈值 (Threshold)")), &QAction::triggered, this, [this](bool) {
+        if (rendererWidget->GetScene()->GetCurrentModel() == nullptr) return;
+        auto obj = rendererWidget->GetScene()->GetCurrentModel()->GetDataObject();
+        if (!obj) return;
+
+        auto attrs = obj->GetAttributeSet();
+        std::vector<IGsize> attrIndices;
+        std::vector<QString> attrNames;
+        if (attrs) {
+            for (IGsize i = 0; i < static_cast<IGsize>(attrs->GetNumberOfAttributes()); ++i) {
+                auto& attr = attrs->GetAttribute(i);
+                if (attr.isDeleted || !attr.pointer) continue;
+                attrIndices.push_back(i);
+                const QString attach = attr.attachmentType == IG_CELL ? QStringLiteral("Cell") : QStringLiteral("Point");
+                attrNames.push_back(QStringLiteral("%1 (%2)").arg(QString::fromStdString(attr.pointer->GetName()), attach));
+            }
+        }
+        if (attrNames.empty()) {
+            showDarkFramelessMessage(QStringLiteral("Warning"),
+                                     QStringLiteral("当前模型没有可用于阈值提取的属性数据。"));
+            return;
+        }
+
+        igQtFilterDialogDockWidget* dialog = new igQtFilterDialogDockWidget(this, true);
+        dialog->setFilterTitle(QStringLiteral("阈值"));
+        int scalarId = dialog->addParameter(igQtFilterDialogDockWidget::QT_COMBO_BOX, QStringLiteral("标量"), attrNames);
+        int dimId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT, QStringLiteral("分量"), "0");
+        int lowerId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT, QStringLiteral("下限"), "0");
+        int upperId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT, QStringLiteral("上限"), "1");
+        int boundaryId = dialog->addParameter(igQtFilterDialogDockWidget::QT_COMBO_BOX, QStringLiteral("边界"),
+                                              std::vector<QString>{QStringLiteral("Closed"), QStringLiteral("Open"),
+                                                                   QStringLiteral("LowerInclusive"),
+                                                                   QStringLiteral("UpperInclusive")});
+        int evalId = dialog->addParameter(igQtFilterDialogDockWidget::QT_COMBO_BOX, QStringLiteral("点数据判定"),
+                                          std::vector<QString>{QStringLiteral("AllScalars"), QStringLiteral("AnyScalar")});
+
+        auto updateRangeEdits = [=]() {
+            bool ok = false;
+            const int choice = dialog->getComboIndex(scalarId, ok);
+            if (!ok || choice < 0 || choice >= static_cast<int>(attrIndices.size())) return;
+            auto* liveAttrs = obj->GetAttributeSet();
+            if (!liveAttrs) return;
+            auto& attr = liveAttrs->GetAttribute(attrIndices[static_cast<size_t>(choice)]);
+            if (!attr.pointer) return;
+
+            int dimension = 0;
+            if (auto* dimEdit = qobject_cast<QLineEdit*>(dialog->getWidget(dimId))) {
+                dimension = dimEdit->text().toInt(&ok);
+                if (!ok) dimension = 0;
+            }
+            dimension = dimension < 0 ? 0 : dimension;
+            const int maxDim = attr.pointer->GetDimension() > 0 ? attr.pointer->GetDimension() - 1 : 0;
+            if (dimension > maxDim) dimension = maxDim;
+
+            auto range = attr.GetDataRange();
+            if (!range) return;
+            int rangeIndex = attr.pointer->GetDimension() <= 1 ? 0 : (1 + dimension);
+            if (rangeIndex >= static_cast<int>(range->GetNumberOfElements())) rangeIndex = 0;
+
+            if (auto* lowerEdit = qobject_cast<QLineEdit*>(dialog->getWidget(lowerId))) {
+                lowerEdit->setText(QString::number(range->GetElementValue(rangeIndex, 0), 'g', 8));
+            }
+            if (auto* upperEdit = qobject_cast<QLineEdit*>(dialog->getWidget(upperId))) {
+                upperEdit->setText(QString::number(range->GetElementValue(rangeIndex, 1), 'g', 8));
+            }
+        };
+        updateRangeEdits();
+        if (auto* combo = qobject_cast<QComboBox*>(dialog->getWidget(scalarId))) {
+            connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), dialog,
+                    [=](int) { updateRangeEdits(); });
+        }
+        if (auto* dimEdit = qobject_cast<QLineEdit*>(dialog->getWidget(dimId))) {
+            connect(dimEdit, &QLineEdit::editingFinished, dialog, [=]() { updateRangeEdits(); });
+        }
+
+        dialog->show();
+        dialog->setApplyFunctor([=, this]() {
+            bool ok = false;
+            const int choice = dialog->getComboIndex(scalarId, ok);
+            if (!ok || choice < 0 || choice >= static_cast<int>(attrIndices.size())) {
+                showDarkFramelessMessage(QStringLiteral("Warning"), QStringLiteral("请选择有效的标量。"));
+                return;
+            }
+
+            auto* liveAttrs = obj->GetAttributeSet();
+            if (!liveAttrs) {
+                showDarkFramelessMessage(QStringLiteral("Warning"), QStringLiteral("当前模型属性已失效。"));
+                return;
+            }
+            auto& attr = liveAttrs->GetAttribute(attrIndices[static_cast<size_t>(choice)]);
+            if (!attr.pointer) {
+                showDarkFramelessMessage(QStringLiteral("Warning"), QStringLiteral("所选标量无效。"));
+                return;
+            }
+
+            const int dimension = dialog->getInt(dimId, ok);
+            const double lower = dialog->getDouble(lowerId, ok);
+            const double upper = dialog->getDouble(upperId, ok);
+            const int boundary = dialog->getComboIndex(boundaryId, ok);
+            const int evaluation = dialog->getComboIndex(evalId, ok);
+
+            auto filter = ThresholdFilter::New();
+            filter->SetInput(obj);
+            filter->SetScalarData(attr.pointer,
+                                  attr.attachmentType == IG_CELL ? ThresholdFilter::Association::Cell
+                                                                 : ThresholdFilter::Association::Point,
+                                  dimension < 0 ? 0 : dimension);
+            filter->SetThreshold(lower, upper);
+            switch (boundary) {
+                case 1: filter->SetBoundaryMode(ThresholdFilter::BoundaryMode::Open); break;
+                case 2: filter->SetBoundaryMode(ThresholdFilter::BoundaryMode::LowerInclusive); break;
+                case 3: filter->SetBoundaryMode(ThresholdFilter::BoundaryMode::UpperInclusive); break;
+                default: filter->SetBoundaryMode(ThresholdFilter::BoundaryMode::Closed); break;
+            }
+            filter->SetPointEvaluation(evaluation == 1 ? ThresholdFilter::PointEvaluation::AnyScalar
+                                                       : ThresholdFilter::PointEvaluation::AllScalars);
+
+            if (!filter->Execute()) {
+                showDarkFramelessMessage(QStringLiteral("Warning"),
+                                         QStringLiteral("阈值提取失败，请检查标量、分量与阈值范围。"));
+                return;
+            }
+
+            auto output = filter->GetOutput();
+            if (!output) {
+                showDarkFramelessMessage(QStringLiteral("Warning"), QStringLiteral("阈值提取未产生有效结果。"));
+                return;
+            }
+            output->SetName(obj->GetName() + "_threshold");
+            modelTreeWidget->addDataObjectToModelTree(output, Algorithm);
+            rendererWidget->update();
+            dialog->close();
+        });
+    });
+
+    connect(ui->menu_filters->addAction(QStringLiteral("生成ID (GenerateIds)")), &QAction::triggered, this, [this](bool) {
+        if (rendererWidget->GetScene()->GetCurrentModel() == nullptr) return;
+        auto obj = rendererWidget->GetScene()->GetCurrentModel()->GetDataObject();
+        if (!obj) return;
+
+        igQtFilterDialogDockWidget* dialog = new igQtFilterDialogDockWidget(this, true);
+        dialog->setFilterTitle(QStringLiteral("生成ID"));
+        int typeId = dialog->addParameter(igQtFilterDialogDockWidget::QT_COMBO_BOX, QStringLiteral("附着类型"),
+                                          std::vector<QString>{QStringLiteral("Point"), QStringLiteral("Cell")});
+        int nameId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT, QStringLiteral("数组名"), "Ids");
+        int startId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT, QStringLiteral("起始ID"), "0");
+        dialog->show();
+        dialog->setApplyFunctor([=, this]() {
+            bool ok = false;
+            const int typeIndex = dialog->getComboIndex(typeId, ok);
+            const IGenum dataType = typeIndex == 1 ? IG_CELL : IG_POINT;
+            QString arrayName = "Ids";
+            if (auto* nameEdit = qobject_cast<QLineEdit*>(dialog->getWidget(nameId))) {
+                arrayName = nameEdit->text().trimmed();
+            }
+            if (arrayName.isEmpty()) arrayName = QStringLiteral("Ids");
+            const int start = dialog->getInt(startId, ok);
+
+            auto filter = iGameGenerateIdsFilter::New(dataType);
+            filter->SetInput(obj);
+            filter->SetArrayName(arrayName.toStdString());
+            filter->SetStartId(start);
+            if (!filter->Execute()) {
+                showDarkFramelessMessage(QStringLiteral("Warning"),
+                                         QStringLiteral("生成ID失败，请确认模型包含对应的点或单元。"));
+                return;
+            }
+
+            modelTreeWidget->updateAllAttriubute(obj);
+            const int index = obj->GetAttributeSet()
+                                      ? obj->GetAttributeSet()->GetAttributeIndex(arrayName.toStdString())
+                                      : -1;
+            auto drawObject = DynamicCast<DrawObject>(obj);
+            if (drawObject) {
+                auto item = modelTreeWidget->getItemFromObject(obj);
+                if (item && item->childCount() > 0 && index >= 0) {
+                    item->setExpanded(true);
+                    auto child = item->child(index);
+                    if (child) {
+                        item->setCurrentChild(child);
+                        item->setSelected(false);
+                        item->viewAttribute(index, -1);
+                        child->setSelected(true);
+                        modelTreeWidget->setCurrentItem(child);
+                    }
+                }
+            }
+            rendererWidget->update();
+            dialog->close();
+        });
+    });
+
+    QMenu* mesh_processing = ui->menu_filters->addMenu(QStringLiteral("数据处理 (Data Processing)"));
+    connect(mesh_processing->addAction(QStringLiteral("表面网格简化 (Surface Simplification)")), &QAction::triggered, this, [&](bool checked) {
+        if (rendererWidget->GetScene()->GetCurrentModel() == nullptr) return;
+
+        igQtFilterDialogDockWidget* dialog = new igQtFilterDialogDockWidget(this, true);
+        dialog->setFilterTitle(QStringLiteral("表面网格简化"));
+        int reductionId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT, QStringLiteral("简化比例 (0..1)"), "0.5");
+        int preserveId =
+                dialog->addParameter(igQtFilterDialogDockWidget::QT_CHECK_BOX, QStringLiteral("保留网格边界"), "true");
+        int scalarId = dialog->addParameter(igQtFilterDialogDockWidget::QT_CHECK_BOX, QStringLiteral("检查网格全部标量"),
+                                            "true");
+        int checkId = dialog->addParameter(igQtFilterDialogDockWidget::QT_CHECK_BOX, QStringLiteral("几何相似性度量"),
+                                           "false");
+        tuneMeshSimplifyFilterDialog(dialog);
+        dialog->show();
+        dialog->setApplyFunctor([=, this]() {
+            bool ok;
+            QString result = "";
+
+            MeshTriangulationFilter::Pointer triangulation = MeshTriangulationFilter::New();
+            auto obj = rendererWidget->GetScene()->GetCurrentModel()->GetDataObject();
+            triangulation->SetInput(obj);
+            ok = triangulation->Execute();
+
+            if (!ok) {
+                result = QString("网格简化算法只支持表面网格");
+                showDarkFramelessMessage(QStringLiteral("非表面网格"), result);
+                dialog->close();
+                return;
+            }
+
+            obj = triangulation->GetOutput();
+
+            MeshSimplificationFilter::Pointer filter = MeshSimplificationFilter::New();
+            filter->SetTargetReduction(1 - dialog->getDouble(reductionId, ok));
+            filter->SetPreserveBoundary(dialog->getChecked(preserveId, ok));
+            filter->SetAllScalarCheck(dialog->getChecked(scalarId, ok));
+            filter->SetInput(obj);
+
+            ok = filter->Execute();
 
         ElevationFilter::Pointer filter = ElevationFilter::New();
         filter->SetDirection(static_cast<float>(dvx), static_cast<float>(dvy),

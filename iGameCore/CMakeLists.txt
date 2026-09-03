@@ -234,8 +234,6 @@ endif ()
 # Exec Install iGameVis Core Module's CMake
 #--------------------------------------------------------------------
 include(Cmake/iGameCoreInstall.cmake)
-#--------------------------------------------------------------------
-
 if (ENABLE_LIBTORCH_MODULE)
     set(RESOURCES_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Resources/AI)
     set(RESOURCES_OUTPUT_DIR ${CMAKE_BINARY_DIR}/Resources/AI)

@@ -42,6 +42,8 @@
 #include "VariableCorrelation/iGameGenerateVariableCorrelationDataFilter.h"
 #include "VariableDensity/iGameGenerateVariableDensityDataFilter.h"
 #include "VolumeMeshAlgorithm/iGameTetraDecimation.h"
+#include "GenerateIds/iGameGenerateIdsFilter.h"
+#include "Threshold/iGameThresholdFilter.h"
 #include "GlobalIds/iGameGenerateGlobalIdsFilter.h"
 #include "FeatureExtraction/iGameCurvatureFilter.h"
 #include "FeatureExtraction/iGameCountCellFacesFilter.h"
