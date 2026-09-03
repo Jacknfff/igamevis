@@ -1501,7 +1501,26 @@ void igQtMainWindow::initAllFilters() {
                 QStringLiteral("范围非法：low 必须小于 high。"));
             return;
         }
-    };
+
+        ElevationFilter::Pointer filter = ElevationFilter::New();
+        filter->SetDirection(static_cast<float>(dvx), static_cast<float>(dvy), static_cast<float>(dvz));
+        filter->SetOutputRange(low, high);
+        filter->SetInput(data);
+        if (filter->Execute()) {
+            modelTreeWidget->updateAllAttriubute(data);
+            auto item = modelTreeWidget->getItemFromObject(data);
+            if (item && item->childCount() > 0) {
+                item->setExpanded(true);
+                auto child = item->child(item->childCount() - 1);
+                if (child) {
+                    item->setSelected(false);
+                    child->setSelected(true);
+                    modelTreeWidget->setCurrentItem(child);
+                }
+            }
+            rendererWidget->update();
+        }
+    });
 
     connect(ui->menu_filters->addAction(QStringLiteral("阈值 (Threshold)")), &QAction::triggered, this, [this](bool) {
         if (rendererWidget->GetScene()->GetCurrentModel() == nullptr) return;
@@ -1693,68 +1712,6 @@ void igQtMainWindow::initAllFilters() {
             rendererWidget->update();
             dialog->close();
         });
-    });
-
-    QMenu* mesh_processing = ui->menu_filters->addMenu(QStringLiteral("数据处理 (Data Processing)"));
-    connect(mesh_processing->addAction(QStringLiteral("表面网格简化 (Surface Simplification)")), &QAction::triggered, this, [&](bool checked) {
-        if (rendererWidget->GetScene()->GetCurrentModel() == nullptr) return;
-
-        igQtFilterDialogDockWidget* dialog = new igQtFilterDialogDockWidget(this, true);
-        dialog->setFilterTitle(QStringLiteral("表面网格简化"));
-        int reductionId = dialog->addParameter(igQtFilterDialogDockWidget::QT_LINE_EDIT, QStringLiteral("简化比例 (0..1)"), "0.5");
-        int preserveId =
-                dialog->addParameter(igQtFilterDialogDockWidget::QT_CHECK_BOX, QStringLiteral("保留网格边界"), "true");
-        int scalarId = dialog->addParameter(igQtFilterDialogDockWidget::QT_CHECK_BOX, QStringLiteral("检查网格全部标量"),
-                                            "true");
-        int checkId = dialog->addParameter(igQtFilterDialogDockWidget::QT_CHECK_BOX, QStringLiteral("几何相似性度量"),
-                                           "false");
-        tuneMeshSimplifyFilterDialog(dialog);
-        dialog->show();
-        dialog->setApplyFunctor([=, this]() {
-            bool ok;
-            QString result = "";
-
-            MeshTriangulationFilter::Pointer triangulation = MeshTriangulationFilter::New();
-            auto obj = rendererWidget->GetScene()->GetCurrentModel()->GetDataObject();
-            triangulation->SetInput(obj);
-            ok = triangulation->Execute();
-
-            if (!ok) {
-                result = QString("网格简化算法只支持表面网格");
-                showDarkFramelessMessage(QStringLiteral("非表面网格"), result);
-                dialog->close();
-                return;
-            }
-
-            obj = triangulation->GetOutput();
-
-            MeshSimplificationFilter::Pointer filter = MeshSimplificationFilter::New();
-            filter->SetTargetReduction(1 - dialog->getDouble(reductionId, ok));
-            filter->SetPreserveBoundary(dialog->getChecked(preserveId, ok));
-            filter->SetAllScalarCheck(dialog->getChecked(scalarId, ok));
-            filter->SetInput(obj);
-
-            ok = filter->Execute();
-
-        ElevationFilter::Pointer filter = ElevationFilter::New();
-        filter->SetDirection(static_cast<float>(dvx), static_cast<float>(dvy),
-                             static_cast<float>(dvz));
-        filter->SetOutputRange(low, high);
-        filter->SetInput(data);
-        if (filter->Execute()) {
-            modelTreeWidget->updateAllAttriubute(data);
-            auto item = modelTreeWidget->getItemFromObject(data);
-            if (item && item->childCount() > 0) {
-                item->setExpanded(true);
-                auto child = item->child(item->childCount() - 1);
-                if (child) {
-                    item->setSelected(false);
-                    child->setSelected(true);
-                    modelTreeWidget->setCurrentItem(child);
-                }
-            }
-            rendererWidget->update();
-        }
     });
 
     /* Feature Edges is intentionally a first-level item under 算法处理. */
