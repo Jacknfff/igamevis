@@ -41,6 +41,7 @@ class igQtCommandManager;
 class igQtChromeFramelessDialog;
 class igQtPartFocusWidget;
 class igQtGlobalIdWidget;
+class igQtTriangleStripWidget;
 class igQtExtractCellsByTypeWidget;
 class igQtAxisAlignedReflectionWidget;
 class igQtPointAndCellIdsWidget;
@@ -122,6 +123,8 @@ public:
     QDockWidget* GlobalIdDockWidget{nullptr};
     igQtGlobalIdWidget* GlobalIdWidget{nullptr};
 
+    QDockWidget* TriangleStripDockWidget{nullptr};
+    igQtTriangleStripWidget* TriangleStripWidget{nullptr};
     // 轴对齐反射面板
     QDockWidget* AxisAlignedReflectionDockWidget{nullptr};
     igQtAxisAlignedReflectionWidget* AxisAlignedReflectionWidget{nullptr};

@@ -319,6 +319,23 @@ endif ()
 igame_add_example(testClip Filter/TestClip.cpp)
 igame_add_example(testSlice Filter/TestSlice.cpp)
 igame_add_example(testIsoVolume Filter/TestIsoVolume.cpp)
+igame_add_example(testTriangleStrip Filter/TriangleStrip/TestTriangleStrip.cpp)
+if (TARGET Qt_module)
+    igame_add_example(testTriangleStripWidget Filter/TriangleStrip/TestTriangleStripWidget.cpp)
+    target_link_libraries(testTriangleStripWidget PRIVATE Qt_module)
+    if (WIN32 AND DEPLOYQT_EXECUTABLE)
+        add_custom_command(TARGET testTriangleStripWidget POST_BUILD
+            COMMAND "${DEPLOYQT_EXECUTABLE}" "$<TARGET_FILE:testTriangleStripWidget>"
+            VERBATIM)
+        if (TARGET Qt5::QOffscreenIntegrationPlugin)
+            add_custom_command(TARGET testTriangleStripWidget POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "$<TARGET_FILE:Qt5::QOffscreenIntegrationPlugin>"
+                    "$<TARGET_FILE_DIR:testTriangleStripWidget>/platforms/"
+                VERBATIM)
+        endif ()
+    endif ()
+endif ()
 igame_add_example(testDeformation Filter/Deformation/TestStressDeformationFilter.cpp)
 igame_add_example(testDeformationCode Filter/Deformation/TestStressDeformationFilterCode.cpp)
 igame_add_example(testContourLine Filter/TestContourLine.cpp)

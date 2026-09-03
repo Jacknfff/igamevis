@@ -6,7 +6,7 @@
 
 // 简单任务 #5 配套测试用例：统计每个单元的顶点数
 // 运行：cd Examples && ./testCountCellVertices
-// 通过条件：cell_vertex_count 数组存在、长度 == 单元数、每个值与 GetCellSize 一致
+// 通过条件：cell_vertex_count 数组存在、长度 == 单元数、每个值与单元点数一致
 int main() {
     const std::string fileName = "./Models/ContourExtraction_cylinder_UnstructedGrid.vtk";
     std::cerr << "[testCountCellVertices] cwd=" << std::filesystem::current_path().string() << " file=" << fileName
@@ -62,7 +62,7 @@ int main() {
     for (IGsize i = 0; i < n; ++i) {
         const igIndex* pointIds = nullptr;
         const IGsize expected = static_cast<IGsize>(mesh->GetCellPointIds(i, pointIds));
-        IGsize actual = static_cast<IGsize>(counts->GetValue(i));
+        const IGsize actual = static_cast<IGsize>(counts->GetValue(i));
         if (expected != actual) {
             std::cerr << "[testCountCellVertices] FAIL: cell " << i << " expected " << expected << " got " << actual
                       << "\n"

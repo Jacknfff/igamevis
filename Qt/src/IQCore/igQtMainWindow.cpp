@@ -64,6 +64,7 @@
 #include <IQWidgets/igQtDeformationWidget.h>
 #include <IQWidgets/igQtExtractLocationWidget.h>
 #include <IQWidgets/igQtGlobalIdWidget.h>
+#include <IQWidgets/igQtTriangleStripWidget.h>
 #include <IQWidgets/igQtExtractCellsByTypeWidget.h>
 #include <IQWidgets/igQtAxisAlignedReflectionWidget.h>
 #include <IQWidgets/igQtPointAndCellIdsWidget.h>
@@ -908,6 +909,18 @@ void igQtMainWindow::initAllUnDefinedComponents() {
     connect(GlobalIdDockWidget, &QDockWidget::visibilityChanged, this, [this](bool visible) {
         if (!visible && GlobalIdWidget) GlobalIdWidget->resetOffsets();
     });
+    TriangleStripDockWidget = igQtTriangleStripWidget::createDockWidget(this);
+    TriangleStripWidget = TriangleStripDockWidget->findChild<igQtTriangleStripWidget*>();
+    addDockWidget(Qt::RightDockWidgetArea, TriangleStripDockWidget);
+    TriangleStripDockWidget->hide();
+    connect(TriangleStripWidget, &igQtTriangleStripWidget::resultReady, this,
+            [this](DataObject::Pointer surface, DataObject::Pointer lines) {
+                // Keep the surface as the selected result, and expose boundary
+                // polylines independently instead of treating them as faces.
+                if (lines) { modelTreeWidget->addDataObjectToModelTree(lines, ItemSource::Algorithm); }
+                modelTreeWidget->addDataObjectToModelTree(surface, ItemSource::Algorithm);
+                rendererWidget->update();
+            });
 
     AxisAlignedReflectionDockWidget =
         igQtAxisAlignedReflectionWidget::createDockWidget(this);
@@ -1819,6 +1832,32 @@ void igQtMainWindow::initAllFilters() {
                     dialog->close();
                 });
             });
+    connect(ui->action_TriangleStrip, &QAction::triggered, this, [this] {
+        auto model = rendererWidget->GetScene()->GetCurrentModel();
+        if (!model || !model->GetDataObject()) {
+            showDarkFramelessMessage(QStringLiteral("三角带转换"), QStringLiteral("请先选择一个模型。"));
+            return;
+        }
+        auto input = model->GetDataObject();
+        if (!TriangleStripWidget->isOutput(input)) { TriangleStripWidget->setInput(input); }
+        TriangleStripDockWidget->show();
+        TriangleStripDockWidget->raise();
+        resizeDocks({TriangleStripDockWidget}, {460}, Qt::Horizontal);
+    });
+    connect(modelTreeWidget, &igQtModelDialogWidget::CurrendModelChanged, this, [this] {
+        if (!TriangleStripDockWidget->isVisible()) { return; }
+        QTimer::singleShot(0, this, [this] {
+            auto model = rendererWidget->GetScene()->GetCurrentModel();
+            auto input = model ? model->GetDataObject() : nullptr;
+            // Publishing a result selects it. Do not turn it into the source
+            // for the next Apply or clear the statistics just computed.
+            if (!TriangleStripWidget->isOutput(input)) { TriangleStripWidget->setInput(input); }
+        });
+    });
+    connect(modelTreeWidget, &igQtModelDialogWidget::ModelDeleted, this, [this](const std::string& name) {
+        auto* input = TriangleStripWidget->input();
+        if (input && input->GetName() == name) { TriangleStripWidget->setInput(nullptr); }
+    });
     connect(ui->action_GlobalIds, &QAction::triggered, this, [this]() {
         auto model = rendererWidget->GetScene()->GetCurrentModel();
         if (!model) {
