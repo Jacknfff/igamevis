@@ -1566,40 +1566,6 @@ void igQtMainWindow::initAllFilters() {
                         return;
                     }
 
-            modelTreeWidget->addDataObjectToModelTree(output, ItemSource::Algorithm);
-            if (auto outputDrawObject = DynamicCast<DrawObject>(output); outputDrawObject && edgeTypeIndex >= 0) {
-                outputDrawObject->ViewCloudPicture(scene, edgeTypeIndex, 0);
-            }
-            rendererWidget->update();
-            dialog->close();
-        });
-        });
-    connect(ui->action_TriangleStrip, &QAction::triggered, this, [this] {
-        auto model = rendererWidget->GetScene()->GetCurrentModel();
-        if (!model || !model->GetDataObject()) {
-            showDarkFramelessMessage(QStringLiteral("三角带转换"), QStringLiteral("请先选择一个模型。"));
-            return;
-        }
-        auto input = model->GetDataObject();
-        if (!TriangleStripWidget->isOutput(input)) { TriangleStripWidget->setInput(input); }
-        TriangleStripDockWidget->show();
-        TriangleStripDockWidget->raise();
-        resizeDocks({TriangleStripDockWidget}, {460}, Qt::Horizontal);
-    });
-    connect(modelTreeWidget, &igQtModelDialogWidget::CurrendModelChanged, this, [this] {
-        if (!TriangleStripDockWidget->isVisible()) { return; }
-        QTimer::singleShot(0, this, [this] {
-            auto model = rendererWidget->GetScene()->GetCurrentModel();
-            auto input = model ? model->GetDataObject() : nullptr;
-            // Publishing a result selects it. Do not turn it into the source
-            // for the next Apply or clear the statistics just computed.
-            if (!TriangleStripWidget->isOutput(input)) { TriangleStripWidget->setInput(input); }
-        });
-    });
-    connect(modelTreeWidget, &igQtModelDialogWidget::ModelDeleted, this, [this](const std::string& name) {
-        auto* input = TriangleStripWidget->input();
-        if (input && input->GetName() == name) { TriangleStripWidget->setInput(nullptr); }
-    });
                     auto output = DynamicCast<UnstructuredMesh>(filter->GetOutput());
                     if (!output) {
                         showDarkFramelessMessage(QStringLiteral("执行失败"),
@@ -1627,6 +1593,32 @@ void igQtMainWindow::initAllFilters() {
                     dialog->close();
                 });
             });
+    connect(ui->action_TriangleStrip, &QAction::triggered, this, [this] {
+        auto model = rendererWidget->GetScene()->GetCurrentModel();
+        if (!model || !model->GetDataObject()) {
+            showDarkFramelessMessage(QStringLiteral("三角带转换"), QStringLiteral("请先选择一个模型。"));
+            return;
+        }
+        auto input = model->GetDataObject();
+        if (!TriangleStripWidget->isOutput(input)) { TriangleStripWidget->setInput(input); }
+        TriangleStripDockWidget->show();
+        TriangleStripDockWidget->raise();
+        resizeDocks({TriangleStripDockWidget}, {460}, Qt::Horizontal);
+    });
+    connect(modelTreeWidget, &igQtModelDialogWidget::CurrendModelChanged, this, [this] {
+        if (!TriangleStripDockWidget->isVisible()) { return; }
+        QTimer::singleShot(0, this, [this] {
+            auto model = rendererWidget->GetScene()->GetCurrentModel();
+            auto input = model ? model->GetDataObject() : nullptr;
+            // Publishing a result selects it. Do not turn it into the source
+            // for the next Apply or clear the statistics just computed.
+            if (!TriangleStripWidget->isOutput(input)) { TriangleStripWidget->setInput(input); }
+        });
+    });
+    connect(modelTreeWidget, &igQtModelDialogWidget::ModelDeleted, this, [this](const std::string& name) {
+        auto* input = TriangleStripWidget->input();
+        if (input && input->GetName() == name) { TriangleStripWidget->setInput(nullptr); }
+    });
     connect(ui->action_GlobalIds, &QAction::triggered, this, [this]() {
         auto model = rendererWidget->GetScene()->GetCurrentModel();
         if (!model) {
