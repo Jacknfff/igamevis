@@ -1,16 +1,15 @@
-#include <iostream>
+#include <CountCellVertices/iGameCountCellVerticesFilter.h>
 #include <filesystem>
 #include <iGameFileIO.h>
 #include <iGameUnstructuredMesh.h>
-#include <CountCellVertices/iGameCountCellVerticesFilter.h>
+#include <iostream>
 
 // 简单任务 #5 配套测试用例：统计每个单元的顶点数
 // 运行：cd Examples && ./testCountCellVertices
 // 通过条件：cell_vertex_count 数组存在、长度 == 单元数、每个值与单元点数一致
 int main() {
     const std::string fileName = "./Models/ContourExtraction_cylinder_UnstructedGrid.vtk";
-    std::cerr << "[testCountCellVertices] cwd=" << std::filesystem::current_path().string()
-              << " file=" << fileName
+    std::cerr << "[testCountCellVertices] cwd=" << std::filesystem::current_path().string() << " file=" << fileName
               << " exists=" << std::filesystem::exists(fileName) << "\n"
               << std::flush;
 
@@ -24,8 +23,9 @@ int main() {
         std::cerr << "[testCountCellVertices] FAIL: not an UnstructuredMesh\n" << std::flush;
         return 1;
     }
-    std::cerr << "[testCountCellVertices] points=" << mesh->GetNumberOfPoints()
-              << " cells=" << mesh->GetNumberOfCells() << "\n" << std::flush;
+    std::cerr << "[testCountCellVertices] points=" << mesh->GetNumberOfPoints() << " cells=" << mesh->GetNumberOfCells()
+              << "\n"
+              << std::flush;
 
     auto filter = iGame::CountCellVerticesFilter::New();
     filter->SetInput(mesh);
@@ -52,8 +52,9 @@ int main() {
 
     const IGsize n = mesh->GetNumberOfCells();
     if (counts->GetNumberOfValues() != n) {
-        std::cerr << "[testCountCellVertices] FAIL: array length " << counts->GetNumberOfValues()
-                  << " != cells " << n << "\n" << std::flush;
+        std::cerr << "[testCountCellVertices] FAIL: array length " << counts->GetNumberOfValues() << " != cells " << n
+                  << "\n"
+                  << std::flush;
         return 1;
     }
 
@@ -63,8 +64,9 @@ int main() {
         const IGsize expected = static_cast<IGsize>(mesh->GetCellPointIds(i, pointIds));
         const IGsize actual = static_cast<IGsize>(counts->GetValue(i));
         if (expected != actual) {
-            std::cerr << "[testCountCellVertices] FAIL: cell " << i << " expected " << expected
-                      << " got " << actual << "\n" << std::flush;
+            std::cerr << "[testCountCellVertices] FAIL: cell " << i << " expected " << expected << " got " << actual
+                      << "\n"
+                      << std::flush;
             ok = false;
             break;
         }

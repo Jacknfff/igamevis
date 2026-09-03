@@ -1,16 +1,15 @@
-#include <iostream>
+#include <ExtractEdges/iGameExtractEdgesFilter.h>
 #include <filesystem>
 #include <iGameFileIO.h>
 #include <iGameUnstructuredMesh.h>
-#include <ExtractEdges/iGameExtractEdgesFilter.h>
+#include <iostream>
 
 // 中等任务 #28 配套测试用例：提取网格边（去重）
 // 运行：cd Examples && ./testExtractEdges
 // 通过条件：输出网格全为 IG_LINE 单元，且每条边恰有 2 个互异端点
 int main() {
     const std::string fileName = "./Models/ContourExtraction_cylinder_UnstructedGrid.vtk";
-    std::cerr << "[testExtractEdges] cwd=" << std::filesystem::current_path().string()
-              << " file=" << fileName
+    std::cerr << "[testExtractEdges] cwd=" << std::filesystem::current_path().string() << " file=" << fileName
               << " exists=" << std::filesystem::exists(fileName) << "\n"
               << std::flush;
 
@@ -25,7 +24,8 @@ int main() {
         return 1;
     }
     std::cerr << "[testExtractEdges] input points=" << mesh->GetNumberOfPoints()
-              << " cells=" << mesh->GetNumberOfCells() << "\n" << std::flush;
+              << " cells=" << mesh->GetNumberOfCells() << "\n"
+              << std::flush;
 
     auto filter = iGame::ExtractEdgesFilter::New();
     filter->SetInput(mesh);
