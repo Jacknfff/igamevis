@@ -4586,7 +4586,6 @@ void igQtMainWindow::initAllFilters() {
             }
             modelTreeWidget->addDataObjectToModelTree(outObj, Algorithm);
             rendererWidget->update();
-            dialog->close();
         });
     });
 

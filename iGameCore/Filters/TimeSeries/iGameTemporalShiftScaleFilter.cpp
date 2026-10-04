@@ -29,7 +29,6 @@ DataObject::Pointer TemporalShiftScaleFilter::CreateOutputLike(const DataObject:
             auto inputMesh = DynamicCast<SurfaceMesh>(input);
             auto outputMesh = SurfaceMesh::New();
             if (inputMesh.IsNotNull()) {
-                // SurfaceMesh 是目前唯一提供浅拷贝的网格类型（共享 points / faces / attributes）
                 outputMesh->ShallowCopy(inputMesh);
             }
             return outputMesh;
@@ -75,7 +74,7 @@ DataObject::Pointer TemporalShiftScaleFilter::CreateOutputLike(const DataObject:
             return outputMesh;
         }
         case IG_DRAW_OBJECT: {
-            // .pvd / .igcm 读出来的是 DrawObject 容器：几何在 sub-data-objects 里，这里一并共享
+            // .pvd 
             auto inputObject = DynamicCast<DrawObject>(input);
             auto outputObject = DrawObject::New();
             if (inputObject.IsNull()) { return outputObject; }
@@ -89,9 +88,6 @@ DataObject::Pointer TemporalShiftScaleFilter::CreateOutputLike(const DataObject:
             outputObject->SetVisibility(inputObject->GetVisibility());
             outputObject->SetAttributeIndex(inputObject->GetAttributeIndex());
 
-            // 共享"当前这一帧"的子对象（只读）。AddSubDataObject() 内部会把子对象的
-            // parent / colorMapper 改写成新的输出容器，搬完必须还原，
-            // 否则输入对象在模型树里的父子关系会被破坏（FileIO 写 IGCM 时依赖 FindParent）。
             std::vector<DataObject::Pointer> children;
             children.reserve(static_cast<std::size_t>(inputObject->GetNumberOfSubDataObjects()));
             for (auto it = inputObject->SubDataObjectIteratorBegin(); it != inputObject->SubDataObjectIteratorEnd();
@@ -111,11 +107,9 @@ DataObject::Pointer TemporalShiftScaleFilter::CreateOutputLike(const DataObject:
             break;
     }
 
-    // 其它类型：退化为基类对象（仍然只换时间轴、共享属性）
-    auto output = DataObject::CreateDataObject(input->GetDataObjectType());
-    if (output == nullptr) { output = DataObject::New(); }
-    output->SetAttributeSet(input->GetAttributeSet());
-    return output;
+    // 对象类型不支持
+    igDebug("TemporalShiftScaleFilter: 不支持的对象类型 {}", input->GetDataObjectType());
+    return nullptr;
 }
 
 bool TemporalShiftScaleFilter::Execute() {
@@ -144,25 +138,14 @@ bool TemporalShiftScaleFilter::Execute() {
     m_OutTimeValues.reserve(static_cast<std::size_t>(timeStepCount));
 
     for (int index = 0; index < timeStepCount; ++index) {
-        auto& inputFrame = inputFrames->GetTargetTimeFrame(static_cast<unsigned int>(index));
+        auto& inputFrame = inputFrames->GetTargetTimeFrame(index);
 
         const float inValue = inputFrame.GetTimeValue();
         const float outValue = (inValue + m_PreShift) * m_Scale + m_PostShift;
         outputFrames->AddTimeStep(outValue, inputFrame.GetMetaData(), inputFrame.GetFrameType());
 
-        // 已经读进内存的帧：连缓存数据一起带过去
-        if (inputFrame.GetISCached()) {
-            const auto newIndex = static_cast<unsigned int>(outputFrames->GetTimeNum() - 1);
-            outputFrames->GetTargetTimeFrame(newIndex).SetCache(inputFrame.GetCachedData());
-        }
-
         m_InTimeValues.push_back(inValue);
         m_OutTimeValues.push_back(outValue);
-    }
-
-    // 保留输入的缓存策略：StreamingData 没有拷贝接口，用最大缓存帧数复现
-    if (inputFrames->GetMaxCacheSize() > 0) {
-        outputFrames->EnableCache(inputFrames->GetMaxCacheSize());
     }
 
     auto output = CreateOutputLike(input);
