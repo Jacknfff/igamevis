@@ -22,31 +22,6 @@ ExtractTimeStepsFilter::ExtractTimeStepsFilter() {
     SetNumberOfOutputs(1); 
 }
 
-int ExtractTimeStepsFilter::GetAvailableTimeStepCount() {
-    auto input = this->GetInput(0);
-    if (input == nullptr) { return 0; }
-
-    auto inputFrames = input->PeekTimeFrames();
-    if (inputFrames == nullptr) { return 0; }
-
-    return static_cast<int>(inputFrames->GetTimeNum());
-}
-
-std::vector<float> ExtractTimeStepsFilter::GetAvailableTimeValues() {
-    std::vector<float> timeValues;
-
-    auto input = this->GetInput(0);
-    if (input == nullptr) { return timeValues; }
-    auto inputFrames = input->PeekTimeFrames();
-    if (inputFrames == nullptr) { return timeValues; }
-
-    const int timeStepCount = static_cast<int>(inputFrames->GetTimeNum());
-    timeValues.reserve(static_cast<std::size_t>(timeStepCount));
-    for (int index = 0; index < timeStepCount; ++index) {
-        timeValues.push_back(inputFrames->GetTargetTimeFrame(static_cast<unsigned int>(index)).GetTimeValue());
-    }
-    return timeValues;
-}
 
 std::vector<int> ExtractTimeStepsFilter::BuildKeptIndices(int timeStepCount) const {
     std::vector<int> keptIndices;
@@ -91,20 +66,9 @@ StreamingData::Pointer ExtractTimeStepsFilter::BuildOutputTimeFrames(const Strea
     for (int index : keptIndices) {
         auto& inputFrame = inputFrames->GetTargetTimeFrame(static_cast<unsigned int>(index));
 
-        // 时间值 / 元数据（文件路径列表）/ 帧类型原样搬运：时间值不重编号，帧数据仍然按需加载
         outputFrames->AddTimeStep(inputFrame.GetTimeValue(), inputFrame.GetMetaData(), inputFrame.GetFrameType());
-
-        // 已经读进内存的帧：连缓存数据一起带过去，避免裁剪后重新读盘
-        if (inputFrame.GetISCached()) {
-            const auto newIndex = static_cast<unsigned int>(outputFrames->GetTimeNum() - 1);
-            outputFrames->GetTargetTimeFrame(newIndex).SetCache(inputFrame.GetCachedData());
-        }
     }
 
-    // 保留输入的缓存策略：StreamingData 没有拷贝接口，用最大缓存帧数复现
-    if (inputFrames->GetMaxCacheSize() > 0) {
-        outputFrames->EnableCache(inputFrames->GetMaxCacheSize());
-    }
     return outputFrames;
 }
 
@@ -192,16 +156,12 @@ DataObject::Pointer ExtractTimeStepsFilter::CreateOutputLike(const DataObject::P
             break;
     }
 
-    // 其它类型：退化为基类对象
-    auto output = DataObject::CreateDataObject(input->GetDataObjectType());
-    if (output == nullptr) { output = DataObject::New(); }
-    output->SetAttributeSet(input->GetAttributeSet());
-    return output;
+    // 对象类型不支持
+    igDebug("ExtractTimeStepsFilter: 不支持的对象类型 {}", input->GetDataObjectType());
+    return nullptr;
 }
 
 bool ExtractTimeStepsFilter::Execute() {
-    this->UpdateProgress(0.0);
-
     auto input = this->GetInput(0);
     if (input == nullptr) {
         igDebug("ExtractTimeStepsFilter: 输入为空");
@@ -241,7 +201,6 @@ bool ExtractTimeStepsFilter::Execute() {
     }
 
     this->SetOutput(output);
-    this->UpdateProgress(1.0);
     return true;
 }
 

@@ -22,8 +22,6 @@
 | `GetNumberOfKeptTimeSteps()` | 本次保留的帧数 |
 | `GetKeptTimeStepIndices()` | 本次保留的帧索引（升序） |
 | `GetKeptTimeValues()` | 本次保留帧的时间值 |
-| `GetAvailableTimeStepCount()` | 输入有多少个时间步（无输入/无时间序列返回 0） |
-| `GetAvailableTimeValues()` | 输入各帧的时间值（供界面列出可选项） |
 
 处理规则：
 

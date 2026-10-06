@@ -27,7 +27,6 @@ public:
     // 索引列表（0 起）；空列表 = 全部时间步都保留
     void SetTimeStepIndices(const std::vector<int>& indices) { m_TimeStepIndices = indices; }
     const std::vector<int>& GetTimeStepIndices() const { return m_TimeStepIndices; }
-    int GetNumberOfTimeStepIndices() const { return static_cast<int>(m_TimeStepIndices.size()); }
 
     // 索引区间（闭区间）+ 步长
     void SetTimeStepRange(int begin, int end) {
@@ -39,15 +38,6 @@ public:
         m_RangeEnd = range[1];
     }
     void SetTimeStepInterval(int interval) { m_TimeStepInterval = interval; } // <= 0 视为 1
-    int GetTimeStepRangeBegin() const { return m_RangeBegin; }
-    int GetTimeStepRangeEnd() const { return m_RangeEnd; }
-    int GetTimeStepInterval() const { return m_TimeStepInterval; }
-
-
-    // 输入的时间步数量；无输入或无时间序列时返回 0
-    int GetAvailableTimeStepCount();
-    // 输入各帧的时间值，按帧索引升序
-    std::vector<float> GetAvailableTimeValues();
 
     int GetNumberOfKeptTimeSteps() const { return static_cast<int>(m_KeptIndices.size()); }
     const std::vector<int>& GetKeptTimeStepIndices() const { return m_KeptIndices; }
