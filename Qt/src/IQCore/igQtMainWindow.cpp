@@ -4655,7 +4655,7 @@ void igQtMainWindow::initAllFilters() {
                             if (attr.pointer) {
                                 QString name = QString::fromStdString(attr.pointer->GetName());
                                 if (name != "vtkValidPointMask") {
-                                    auto drawObj = <DrawObject>(output);
+                                    auto drawObj = DynamicCast<DrawObject>(output);
                                     if (drawObj) {
                                         drawObj->ViewCloudPicture(scene, i, -1);
                                         modelTreeWidget->updateAllAttriubute(output);
