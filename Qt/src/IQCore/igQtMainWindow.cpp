@@ -1852,14 +1852,6 @@ void igQtMainWindow::initAllFilters() {
         StandardFilterCategory category;
         bool common;
     };
-
-    // 面板执行成功：把独立输出节点加入模型树
-    connect(m_extractTimeStepsWidget, &igQtExtractTimeStepsWidget::ExtractTimeStepsApplied, this,
-            [this](iGame::DataObject::Pointer output) {
-                if (!output) return;
-                modelTreeWidget->addDataObjectToModelTree(output, ItemSource::Algorithm);
-                rendererWidget->update();
-            });
   
     // 保持按 id 的字母顺序，既方便“按名称”浏览，也方便检查清单是否完整。
     static const StandardFilterEntry standardFilterEntries[] = {
